@@ -54,7 +54,7 @@
             </button>
             <div
               v-if="showColumnDropdown"
-              class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
+              class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-xl border border-gray-200/80 bg-white py-1 shadow-dropdown dark:border-dark-700 dark:bg-dark-800"
             >
               <button
                 v-for="col in toggleableColumns"

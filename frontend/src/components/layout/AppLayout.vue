@@ -8,7 +8,7 @@
 
     <!-- Main Content Area -->
     <div
-      class="relative min-h-screen transition-all duration-300"
+      class="relative min-h-screen transition-[margin] duration-300 ease-out-quart"
       :class="[sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-64']"
     >
       <!-- Header -->
@@ -16,7 +16,9 @@
 
       <!-- Main Content -->
       <main class="p-4 md:p-6 lg:p-8">
-        <slot />
+        <div :key="route.path" class="animate-fade-up">
+          <slot />
+        </div>
       </main>
     </div>
   </div>
@@ -25,6 +27,7 @@
 <script setup lang="ts">
 import '@/styles/onboarding.css'
 import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { useOnboardingTour } from '@/composables/useOnboardingTour'
@@ -32,6 +35,7 @@ import { useOnboardingStore } from '@/stores/onboarding'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
 
+const route = useRoute()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)

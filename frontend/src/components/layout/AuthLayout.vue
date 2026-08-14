@@ -31,21 +31,21 @@
         <!-- Custom Logo or Default Logo -->
         <template v-if="settingsLoaded">
           <div
-            class="mb-4 inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl shadow-lg shadow-primary-500/30"
+            class="mb-4 inline-flex h-16 w-16 animate-fade-up items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-primary-500/20 ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-white/10"
           >
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>
-          <h1 class="text-gradient mb-2 text-3xl font-bold">
+          <h1 class="text-gradient mb-2 animate-fade-up text-3xl font-bold tracking-tight" style="animation-delay: 50ms">
             {{ siteName }}
           </h1>
-          <p class="text-sm text-gray-500 dark:text-dark-400">
+          <p class="animate-fade-up text-sm text-gray-500 dark:text-dark-400" style="animation-delay: 100ms">
             {{ siteSubtitle }}
           </p>
         </template>
       </div>
 
       <!-- Card Container -->
-      <div class="card-glass rounded-2xl p-8 shadow-glass">
+      <div class="card-glass animate-fade-up rounded-2xl p-8 shadow-glass" style="animation-delay: 150ms">
         <slot />
       </div>
 

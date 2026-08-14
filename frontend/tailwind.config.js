@@ -69,9 +69,15 @@ export default {
         'glass-sm': '0 4px 16px rgba(0, 0, 0, 0.06)',
         glow: '0 0 20px rgba(20, 184, 166, 0.25)',
         'glow-lg': '0 0 40px rgba(20, 184, 166, 0.35)',
-        card: '0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)',
-        'card-hover': '0 10px 40px rgba(0, 0, 0, 0.08)',
-        'inner-glow': 'inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+        card: '0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.05)',
+        'card-hover':
+          '0 2px 4px rgba(15, 23, 42, 0.04), 0 12px 32px -8px rgba(15, 23, 42, 0.12)',
+        'card-lift':
+          '0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -12px rgba(15, 23, 42, 0.12)',
+        dropdown:
+          '0 4px 6px -2px rgba(15, 23, 42, 0.05), 0 12px 32px -8px rgba(15, 23, 42, 0.18)',
+        'inner-glow': 'inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+        'focus-ring': '0 0 0 3px rgba(20, 184, 166, 0.15)'
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
@@ -84,6 +90,7 @@ export default {
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',
+        'fade-up': 'fadeUp 0.45s cubic-bezier(0.21, 1.02, 0.73, 1) backwards',
         'slide-up': 'slideUp 0.3s ease-out',
         'slide-down': 'slideDown 0.3s ease-out',
         'slide-in-right': 'slideInRight 0.3s ease-out',
@@ -96,6 +103,10 @@ export default {
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' }
+        },
+        fadeUp: {
+          '0%': { opacity: '0', transform: 'translateY(12px) scale(0.99)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' }
         },
         slideUp: {
           '0%': { opacity: '0', transform: 'translateY(10px)' },
@@ -121,6 +132,10 @@ export default {
           '0%': { boxShadow: '0 0 20px rgba(20, 184, 166, 0.25)' },
           '100%': { boxShadow: '0 0 30px rgba(20, 184, 166, 0.4)' }
         }
+      },
+      transitionTimingFunction: {
+        'out-expo': 'cubic-bezier(0.21, 1.02, 0.73, 1)',
+        'out-quart': 'cubic-bezier(0.25, 1, 0.5, 1)'
       },
       backdropBlur: {
         xs: '2px'
