@@ -578,6 +578,19 @@ export default {
     nav: {
       login: 'Sign In',
       backToDashboard: 'Back to Console'
+    },
+    view: {
+      cards: 'Cards',
+      table: 'Pricing Table'
+    },
+    stats: {
+      models: 'Models',
+      groups: 'Groups',
+      platforms: 'Platforms'
+    },
+    card: {
+      groupsCount: '{count} groups available',
+      detail: 'Details'
     }
   },
 

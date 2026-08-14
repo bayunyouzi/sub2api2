@@ -583,6 +583,19 @@ export default {
     nav: {
       login: '登录',
       backToDashboard: '回到后台'
+    },
+    view: {
+      cards: '卡片',
+      table: '价格表'
+    },
+    stats: {
+      models: '可用模型',
+      groups: '分组',
+      platforms: '平台'
+    },
+    card: {
+      groupsCount: '{count} 个分组可选',
+      detail: '详情'
     }
   },
 
