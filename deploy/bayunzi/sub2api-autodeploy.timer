@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for a tested sub2api main deployment every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=5min
+RandomizedDelaySec=20
+Unit=sub2api-autodeploy.service
+
+[Install]
+WantedBy=timers.target

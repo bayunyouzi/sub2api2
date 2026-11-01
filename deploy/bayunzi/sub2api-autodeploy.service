@@ -1,0 +1,18 @@
+[Unit]
+Description=Deploy the tested sub2api main image
+After=docker.service network-online.target nginx.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+WorkingDirectory=/opt/zeabur-migration
+ExecStart=/usr/bin/python3 /opt/zeabur-migration/autodeploy/autodeploy.py
+TimeoutStartSec=1h
+TimeoutStopSec=10min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
