@@ -86,7 +86,15 @@ jobs:
       - name: Verify startup and HTTP endpoints on an isolated database
         run: |
           set -euo pipefail
-          cleanup() { docker rm -f deploy-smoke-app deploy-smoke-postgres deploy-smoke-redis >/dev/null 2>&1 || true; docker network rm deploy-smoke >/dev/null 2>&1 || true; }
+          cleanup() {
+            result=$?
+            if [ "$result" -ne 0 ]; then
+              docker logs --tail 100 deploy-smoke-app 2>&1 || true
+              docker logs --tail 30 deploy-smoke-postgres 2>&1 || true
+            fi
+            docker rm -f deploy-smoke-app deploy-smoke-postgres deploy-smoke-redis >/dev/null 2>&1 || true
+            docker network rm deploy-smoke >/dev/null 2>&1 || true
+          }
           trap cleanup EXIT
           docker pull postgres:18-alpine
           docker pull redis:7.4-alpine
@@ -105,23 +113,25 @@ jobs:
             if docker exec deploy-smoke-postgres pg_isready -h 127.0.0.1 -U sub2api -d sub2api >/dev/null 2>&1; then break; fi
             sleep 2
           done
-          docker run -d --name deploy-smoke-app --network deploy-smoke -p 127.0.0.1:18080:443 \
+          docker run -d --name deploy-smoke-app --network deploy-smoke \
             -e AUTO_SETUP=true -e SERVER_HOST=0.0.0.0 -e SERVER_PORT=443 \
             -e DATABASE_HOST=postgres -e DATABASE_PORT=5432 -e DATABASE_USER=sub2api \
             -e DATABASE_DBNAME=sub2api -e DATABASE_SSLMODE=disable -e "DATABASE_PASSWORD=$password" \
             -e REDIS_HOST=redis -e REDIS_PORT=6379 -e "REDIS_PASSWORD=$password" \
             -e "JWT_SECRET=$jwt" -e "TOTP_ENCRYPTION_KEY=$totp" \
-            -e ADMIN_EMAIL=smoke@example.invalid -e "ADMIN_PASSWORD=$password" \
+            -e ADMIN_EMAIL=smoke@example.invalid -e "ADMIN_PASSWORD=Smoke-Aa9!$password" \
             "bayunzi/sub2api-main:sha-$SOURCE_SHA"
           ready=false
           for attempt in $(seq 1 150); do
-            if curl --fail --silent --max-time 3 http://127.0.0.1:18080/health | grep -q '"status":"ok"'; then ready=true; break; fi
+            test "$(docker inspect deploy-smoke-app --format '{{.State.Status}}')" = running
+            if docker exec deploy-smoke-app wget -q -T 3 -O - http://127.0.0.1:443/health | grep -q '"status":"ok"'; then ready=true; break; fi
             sleep 2
           done
           test "$ready" = true
-          curl --fail --silent --max-time 10 http://127.0.0.1:18080/login --output smoke-login.html
+          docker exec deploy-smoke-app wget -q -T 10 -O - http://127.0.0.1:443/login > smoke-login.html
           grep -qi '<html' smoke-login.html
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 http://127.0.0.1:18080/v1/models)" = 401
+          docker exec deploy-smoke-app sh -c 'wget -S -T 10 -O /dev/null http://127.0.0.1:443/v1/models 2>&1 || true' > smoke-api-status.txt
+          grep -q 'HTTP/1.1 401' smoke-api-status.txt
 
       - name: Package the image and immutable deployment metadata
         run: |
@@ -161,3 +171,4 @@ jobs:
           fi
           gh release upload "$tag" deployment-output/image.tar.gz deployment-output/metadata.json --clobber
           gh release edit "$tag" --draft=false --prerelease --latest=false
+
