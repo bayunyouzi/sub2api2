@@ -203,7 +203,7 @@ def isolated_volumes(service, volumes, test_root):
                 raise RuntimeError('Unexpected preflight configuration file')
             replacement = test_root / 'config' / (service + '-' + original.name)
             replacement.parent.mkdir(mode=0o700, exist_ok=True)
-            shutil.copyfile(original, replacement)
+            shutil.copy2(original, replacement)
         else:
             raise RuntimeError('Unsupported preflight volume layout')
         result.append(':'.join([str(replacement), destination] + options))
@@ -253,6 +253,11 @@ def preflight(metadata, configuration):
         compose('up', '-d', '--no-deps', '--pull', 'never', 'sub2api', config=test_config, project=project)
         wait_for_app(metadata['image_id'], config=test_config, project=project)
         log('Isolated database migration and startup checks passed')
+    except BaseException:
+        if test_config.exists():
+            compose('logs', '--tail', '120', config=test_config, project=project,
+                    output_file=WORK / 'preflight-container.log', check=False, timeout=60)
+        raise
     finally:
         if test_config.exists():
             cleanup = compose('down', '--timeout', '10', config=test_config, project=project,
@@ -293,11 +298,12 @@ def restore(directory):
     compose('stop', '--timeout', '15', 'redis')
     redis_root = ROOT / 'data/redis'
     old_rdb = redis_root / 'dump.rdb'
-    original_stat = old_rdb.stat()
+    original_stat = old_rdb.stat() if old_rdb.exists() else redis_root.stat()
+    original_mode = old_rdb.stat().st_mode & 0o777 if old_rdb.exists() else 0o644
     destination = redis_root / 'dump.rdb.restore'
     shutil.copyfile(directory / 'redis.rdb', destination)
     os.chown(destination, original_stat.st_uid, original_stat.st_gid)
-    os.chmod(destination, original_stat.st_mode & 0o777)
+    os.chmod(destination, original_mode)
     destination.replace(old_rdb)
     app_root = ROOT / 'data/sub2api'
     failed_root = directory / 'failed-app-data'

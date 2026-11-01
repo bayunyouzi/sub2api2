@@ -148,12 +148,14 @@ class DeploymentRecoveryTests(unittest.TestCase):
         config = self.root / 'config'
         config.mkdir()
         (config / 'redis.conf').write_text('appendonly no\n')
+        (config / 'redis.conf').chmod(0o644)
         isolated = self.work / 'test'
         isolated.mkdir()
         volumes = controller.isolated_volumes('redis', ['./data/redis:/data', './config/redis.conf:/etc/redis.conf:ro'], isolated)
         self.assertEqual(volumes[0], str(isolated / 'data/redis') + ':/data')
         self.assertEqual(volumes[1], str(isolated / 'config/redis-redis.conf') + ':/etc/redis.conf:ro')
         self.assertEqual((isolated / 'config/redis-redis.conf').read_text(), 'appendonly no\n')
+        self.assertEqual((isolated / 'config/redis-redis.conf').stat().st_mode & 0o777, 0o644)
         with self.assertRaisesRegex(RuntimeError, 'Unsupported preflight volume'):
             controller.isolated_volumes('redis', ['./config/redis.conf:/etc/redis.conf'], isolated)
 
