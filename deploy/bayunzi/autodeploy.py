@@ -191,6 +191,25 @@ def wait_for_app(expected_image=None, *, config=None, project=None, seconds=300)
     raise RuntimeError('Application startup checks timed out')
 
 
+def isolated_volumes(service, volumes, test_root):
+    result = []
+    for volume in volumes:
+        source, destination, *options = volume.split(':')
+        if source == './data/' + service:
+            replacement = test_root / 'data' / service
+        elif source.startswith('./config/') and options == ['ro']:
+            original = ROOT / source
+            if original.is_symlink() or not original.is_file() or not original.resolve().is_relative_to((ROOT / 'config').resolve()):
+                raise RuntimeError('Unexpected preflight configuration file')
+            replacement = test_root / 'config' / (service + '-' + original.name)
+            replacement.parent.mkdir(mode=0o700, exist_ok=True)
+            shutil.copyfile(original, replacement)
+        else:
+            raise RuntimeError('Unsupported preflight volume layout')
+        result.append(':'.join([str(replacement), destination] + options))
+    return result
+
+
 def preflight(metadata, configuration):
     """Apply migrations to an isolated copy before interrupting production."""
     test_root = WORK / 'preflight'
@@ -200,7 +219,7 @@ def preflight(metadata, configuration):
     test_config = test_root / 'compose.json'
     project = 'sub2api-preflight'
     try:
-        shutil.copytree(ROOT / 'data/sub2api', test_root / 'sub2api', ignore=shutil.ignore_patterns('logs'))
+        shutil.copytree(ROOT / 'data/sub2api', test_root / 'data/sub2api', ignore=shutil.ignore_patterns('logs'))
         services = {}
         for service in ('postgres', 'redis', 'sub2api'):
             value = copy.deepcopy(configuration['services'][service])
@@ -210,8 +229,7 @@ def preflight(metadata, configuration):
             value['networks'] = ['isolated']
             value['mem_limit'] = {'postgres': '640m', 'redis': '256m', 'sub2api': '1024m'}[service]
             value['cpus'] = 1
-            value['volumes'] = [str(test_root / service) + ':' + volume.split(':', 1)[1]
-                                for volume in value.get('volumes', [])]
+            value['volumes'] = isolated_volumes(service, value.get('volumes', []), test_root)
             if service == 'sub2api':
                 value['image'] = metadata['image']
                 value['environment']['SERVER_PORT'] = '443'
