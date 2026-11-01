@@ -1,0 +1,139 @@
+name: Publish main deployment
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bayunzi-main-deployment
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.repository == 'bayunyouzi/sub2api2' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: read
+    env:
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out the tested commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+
+      - name: Require passing CI on the current main commit
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$REPOSITORY/branches/main" --jq .commit.sha)" = "$SOURCE_SHA"
+          gh api --method GET "repos/$REPOSITORY/actions/workflows/backend-ci.yml/runs" \
+            -f head_sha="$SOURCE_SHA" -f event=push -f branch=main -f per_page=20 \
+            --jq '.workflow_runs | map(select(.conclusion == "success")) | length > 0' | grep -qx true
+
+      - name: Build the x86_64 production image
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < backend/cmd/server/VERSION)"
+          docker build --platform linux/amd64 \
+            --build-arg "VERSION=$version" --build-arg "COMMIT=$SOURCE_SHA" \
+            --build-arg "DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --build-arg GOPROXY=https://proxy.golang.org,direct \
+            --build-arg GOSUMDB=sum.golang.org \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$SOURCE_SHA" \
+            --tag "bayunzi/sub2api-main:sha-$SOURCE_SHA" .
+
+      - name: Verify startup and HTTP endpoints on an isolated database
+        run: |
+          set -euo pipefail
+          cleanup() { docker rm -f deploy-smoke-app deploy-smoke-postgres deploy-smoke-redis >/dev/null 2>&1 || true; docker network rm deploy-smoke >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker pull postgres:18-alpine
+          docker pull redis:7.4-alpine
+          docker network create --internal deploy-smoke
+          password="$(openssl rand -hex 24)"
+          jwt="$(openssl rand -hex 32)"
+          totp="$(openssl rand -hex 32)"
+          echo "::add-mask::$password"
+          echo "::add-mask::$jwt"
+          echo "::add-mask::$totp"
+          docker run -d --name deploy-smoke-postgres --network deploy-smoke --network-alias postgres \
+            -e POSTGRES_USER=sub2api -e POSTGRES_DB=sub2api -e "POSTGRES_PASSWORD=$password" postgres:18-alpine
+          docker run -d --name deploy-smoke-redis --network deploy-smoke --network-alias redis redis:7.4-alpine \
+            redis-server --requirepass "$password"
+          for attempt in $(seq 1 60); do
+            if docker exec deploy-smoke-postgres pg_isready -U sub2api -d sub2api >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          docker run -d --name deploy-smoke-app --network deploy-smoke -p 127.0.0.1:18080:443 \
+            -e AUTO_SETUP=true -e SERVER_HOST=0.0.0.0 -e SERVER_PORT=443 \
+            -e DATABASE_HOST=postgres -e DATABASE_PORT=5432 -e DATABASE_USER=sub2api \
+            -e DATABASE_DBNAME=sub2api -e DATABASE_SSLMODE=disable -e "DATABASE_PASSWORD=$password" \
+            -e REDIS_HOST=redis -e REDIS_PORT=6379 -e "REDIS_PASSWORD=$password" \
+            -e "JWT_SECRET=$jwt" -e "TOTP_ENCRYPTION_KEY=$totp" \
+            -e ADMIN_EMAIL=smoke@example.invalid -e "ADMIN_PASSWORD=$password" \
+            "bayunzi/sub2api-main:sha-$SOURCE_SHA"
+          ready=false
+          for attempt in $(seq 1 150); do
+            if curl --fail --silent --max-time 3 http://127.0.0.1:18080/health | grep -q '"status":"ok"'; then ready=true; break; fi
+            sleep 2
+          done
+          test "$ready" = true
+          curl --fail --silent --max-time 10 http://127.0.0.1:18080/login | grep -qi '<html'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 http://127.0.0.1:18080/v1/models)" = 401
+
+      - name: Package the image and immutable deployment metadata
+        run: |
+          set -euo pipefail
+          mkdir deployment-output
+          docker image save "bayunzi/sub2api-main:sha-$SOURCE_SHA" | gzip -1 > deployment-output/image.tar.gz
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          out = pathlib.Path('deployment-output')
+          sha = os.environ['SOURCE_SHA']
+          image = 'bayunzi/sub2api-main:sha-' + sha
+          metadata = {
+              'schema_version': 1,
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'revision': sha,
+              'image': image,
+              'image_id': subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{.Id}}'], text=True).strip(),
+              'version': pathlib.Path('backend/cmd/server/VERSION').read_text().strip(),
+              'size': (out / 'image.tar.gz').stat().st_size,
+              'sha256': hashlib.file_digest((out / 'image.tar.gz').open('rb'), 'sha256').hexdigest(),
+          }
+          (out / 'metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
+          PY
+
+      - name: Publish the tested deployment bundle
+        run: |
+          set -euo pipefail
+          tag="deploy-main-$SOURCE_SHA"
+          if gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null | grep -qx false; then
+            echo 'This commit already has a published deployment bundle.'
+            exit 0
+          fi
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$SOURCE_SHA" --draft --prerelease --latest=false \
+              --title "main deployment ${SOURCE_SHA:0:12}" \
+              --notes "Automated x86_64 deployment bundle for commit $SOURCE_SHA. Published after CI, image build and isolated startup checks. No production data or credentials are included."
+          fi
+          gh release upload "$tag" deployment-output/image.tar.gz deployment-output/metadata.json --clobber
+          gh release edit "$tag" --draft=false --prerelease --latest=false
