@@ -222,7 +222,7 @@ def preflight(metadata, configuration):
         dump_database(test_root / 'zeabur.dump')
         compose('up', '-d', '--pull', 'never', 'postgres', 'redis', config=test_config, project=project)
         for attempt in range(60):
-            ready = compose('exec', '-T', 'postgres', 'pg_isready', '-U', 'root',
+            ready = compose('exec', '-T', 'postgres', 'pg_isready', '-h', '127.0.0.1', '-U', 'root',
                             config=test_config, project=project, check=False)
             if ready.returncode == 0:
                 break

@@ -102,7 +102,7 @@ jobs:
           docker run -d --name deploy-smoke-redis --network deploy-smoke --network-alias redis redis:7.4-alpine \
             redis-server --requirepass "$password"
           for attempt in $(seq 1 60); do
-            if docker exec deploy-smoke-postgres pg_isready -U sub2api -d sub2api >/dev/null 2>&1; then break; fi
+            if docker exec deploy-smoke-postgres pg_isready -h 127.0.0.1 -U sub2api -d sub2api >/dev/null 2>&1; then break; fi
             sleep 2
           done
           docker run -d --name deploy-smoke-app --network deploy-smoke -p 127.0.0.1:18080:443 \
@@ -119,7 +119,8 @@ jobs:
             sleep 2
           done
           test "$ready" = true
-          curl --fail --silent --max-time 10 http://127.0.0.1:18080/login | grep -qi '<html'
+          curl --fail --silent --max-time 10 http://127.0.0.1:18080/login --output smoke-login.html
+          grep -qi '<html' smoke-login.html
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 http://127.0.0.1:18080/v1/models)" = 401
 
       - name: Package the image and immutable deployment metadata
